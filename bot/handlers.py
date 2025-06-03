@@ -12,16 +12,22 @@ async def handle_location(message: types.Message):
     Args:
         message (types.Message): Telegram message containing location
     """
-    if message.location:
+    try:
+        if not message.location:
+            await message.reply("Please share a location to get an interesting fact!")
+            return
+
         # Send a temporary message to show we're processing
         processing_msg = await message.reply("🔍 Looking for an interesting fact about this location...")
         
         try:
+            # Get coordinates
             lat = message.location.latitude
             lon = message.location.longitude
-            rounded_lat, rounded_lon = round_coordinates(lat, lon)
             
-            logger.info(f"Received location: {rounded_lat}, {rounded_lon}")
+            # Round coordinates
+            rounded_lat, rounded_lon = round_coordinates(lat, lon)
+            logger.info(f"Processing location: {rounded_lat}, {rounded_lon}")
             
             # Get fun fact from OpenAI
             fun_fact = await get_fun_fact(rounded_lat, rounded_lon)
@@ -30,5 +36,18 @@ async def handle_location(message: types.Message):
             await processing_msg.edit_text(f"🌟 {fun_fact}")
             
         except Exception as e:
+            error_msg = "Sorry, I encountered an error while processing your location. Please try again later."
             logger.error(f"Error processing location: {e}")
-            await processing_msg.edit_text("Sorry, I encountered an error while processing your location. Please try again later.") 
+            
+            try:
+                await processing_msg.edit_text(error_msg)
+            except Exception as edit_error:
+                logger.error(f"Could not edit processing message: {edit_error}")
+                await message.reply(error_msg)
+                
+    except Exception as e:
+        logger.error(f"Unexpected error in location handler: {e}")
+        try:
+            await message.reply("An unexpected error occurred. Please try again later.")
+        except:
+            logger.error("Could not send error message to user") 

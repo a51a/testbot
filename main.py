@@ -1,13 +1,13 @@
 import os
 import sys
 import logging
-from aiogram import Bot, Dispatcher, executor, types
-from dotenv import load_dotenv
-from bot.handlers import handle_location
+from aiogram import Bot, Dispatcher, types
 from aiohttp import web
 import asyncio
+from dotenv import load_dotenv
+from bot.handlers import handle_location
 
-# Configure logging
+# Configure logging first, before any other operations
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -15,86 +15,74 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-try:
-    # Load environment variables
-    load_dotenv()
+# Load environment variables
+load_dotenv()
 
-    # Verify required environment variables
-    required_vars = ['TELEGRAM_TOKEN', 'OPENAI_API_KEY', 'PORT']
-    for var in required_vars:
-        value = os.getenv(var)
-        if var == 'PORT':
-            value = value or '8080'  # Default port if not set
-        if not value and var != 'PORT':
-            raise ValueError(f"Missing required environment variable: {var}")
-        logger.info(f"Environment variable {var} is set")
+# Get environment variables with defaults
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+PORT = int(os.getenv("PORT", 8080))
 
-    # Initialize bot and dispatcher
-    bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
-    dp = Dispatcher(bot)
+if not TELEGRAM_TOKEN:
+    logger.error("TELEGRAM_TOKEN environment variable is not set!")
+    sys.exit(1)
 
-    # Register handlers
-    dp.register_message_handler(handle_location, content_types=[types.ContentType.LOCATION])
+# Initialize bot and dispatcher
+bot = Bot(token=TELEGRAM_TOKEN)
+dp = Dispatcher(bot)
 
-    # Create web app for health checks
-    app = web.Application()
+# Register handlers
+@dp.message_handler(content_types=[types.ContentType.LOCATION])
+async def location_handler(message: types.Message):
+    await handle_location(message)
 
-    async def health_check(request):
-        """Health check endpoint for Railway"""
-        return web.Response(text="Bot is running!")
+# Web app
+app = web.Application()
 
-    app.router.add_get("/", health_check)
+async def health_check(request):
+    """Health check endpoint"""
+    return web.Response(text="Bot is running!")
 
-    async def on_startup(dp):
-        logger.info("Bot started!")
-        await bot.send_message(chat_id=os.getenv('ADMIN_CHAT_ID', ''), text="Bot has been started!")
+app.router.add_get("/", health_check)
 
-    async def on_shutdown(dp):
-        logger.warning("Shutting down..")
-        await bot.close()
+async def start_bot():
+    """Start the bot polling"""
+    logger.info("Starting bot polling...")
+    await dp.start_polling()
 
-    async def start_bot():
-        try:
-            await dp.start_polling()
-        except Exception as e:
-            logger.error(f"Error in bot polling: {e}")
-            raise
+async def start_web():
+    """Start the web server"""
+    logger.info(f"Starting web server on port {PORT}...")
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
+    await site.start()
+    return runner
 
-    if __name__ == "__main__":
-        # Get the PORT from environment variable (Railway sets this)
-        port = int(os.getenv("PORT", 8080))
-        logger.info(f"Starting server on port {port}")
+async def main():
+    """Main function to run both bot and web server"""
+    try:
+        # Start web server
+        runner = await start_web()
         
-        # Setup handlers
-        dp.startup.register(on_startup)
-        dp.shutdown.register(on_shutdown)
+        # Start bot
+        await start_bot()
         
-        # Create event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            # Start both bot and web server
-            runner = web.AppRunner(app)
-            loop.run_until_complete(runner.setup())
-            site = web.TCPSite(runner, host="0.0.0.0", port=port)
+        # Keep the script running
+        while True:
+            await asyncio.sleep(3600)  # Sleep for 1 hour
             
-            # Run both the bot and web server
-            loop.create_task(start_bot())
-            loop.create_task(site.start())
-            
-            # Run forever
-            logger.info("Starting event loop")
-            loop.run_forever()
-        except Exception as e:
-            logger.error(f"Fatal error: {e}")
-            sys.exit(1)
-        finally:
-            try:
-                loop.run_until_complete(runner.cleanup())
-                loop.close()
-            except Exception as e:
-                logger.error(f"Error during cleanup: {e}")
-except Exception as e:
-    logger.error(f"Initialization error: {e}")
-    sys.exit(1) 
+    except Exception as e:
+        logger.error(f"Error in main loop: {e}")
+        raise
+    finally:
+        if 'runner' in locals():
+            await runner.cleanup()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot stopped!")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        sys.exit(1) 
