@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from aiohttp import web
 import asyncio
 from dotenv import load_dotenv
-from bot.handlers import handle_location
+from bot.handlers import cmd_start, handle_location, handle_unknown
 
 # Configure logging first, before any other operations
 logging.basicConfig(
@@ -66,6 +66,11 @@ try:
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher(bot)
     
+    # Register handlers
+    dp.register_message_handler(cmd_start, commands=['start', 'help'])
+    dp.register_message_handler(handle_location, content_types=[types.ContentType.LOCATION])
+    dp.register_message_handler(handle_unknown, content_types=types.ContentTypes.ANY)
+    
     # Verify bot token by making a test API call
     async def verify_token():
         try:
@@ -84,11 +89,6 @@ except Exception as e:
     logger.error(f"Failed to initialize bot: {e}")
     sys.exit(1)
 
-# Register handlers
-@dp.message_handler(content_types=[types.ContentType.LOCATION])
-async def location_handler(message: types.Message):
-    await handle_location(message)
-
 # Web app
 app = web.Application()
 
@@ -101,7 +101,11 @@ app.router.add_get("/", health_check)
 async def start_bot():
     """Start the bot polling"""
     logger.info("Starting bot polling...")
-    await dp.start_polling()
+    try:
+        await dp.start_polling(reset_webhook=True)
+    except Exception as e:
+        logger.error(f"Error in bot polling: {e}")
+        raise
 
 async def start_web():
     """Start the web server"""
@@ -117,13 +121,16 @@ async def main():
     try:
         # Start web server
         runner = await start_web()
+        logger.info("Web server started successfully")
         
         # Start bot
         await start_bot()
+        logger.info("Bot polling started successfully")
         
         # Keep the script running
         while True:
             await asyncio.sleep(3600)  # Sleep for 1 hour
+            logger.info("Bot is still running...")  # Periodic health check log
             
     except Exception as e:
         logger.error(f"Error in main loop: {e}")
@@ -134,6 +141,7 @@ async def main():
 
 if __name__ == "__main__":
     try:
+        logger.info("Starting application...")
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped!")
