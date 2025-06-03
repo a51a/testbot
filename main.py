@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import re
 from aiogram import Bot, Dispatcher, types
 from aiohttp import web
 import asyncio
@@ -18,15 +19,33 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
+def validate_token(token: str) -> bool:
+    """
+    Validate Telegram bot token format.
+    Should be in format: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+    """
+    if not token:
+        return False
+    # Token format: numbers:letters
+    pattern = r'^\d+:[\w-]+$'
+    return bool(re.match(pattern, token))
+
 def clean_token(token: str) -> str:
     """Clean the token by removing spaces and quotes"""
     if not token:
         return ""
-    # Remove spaces, quotes and newlines
-    return token.strip().strip('"\'').strip()
+    # Remove spaces, quotes, newlines and any hidden characters
+    cleaned = token.strip().strip('"\'').strip()
+    # Remove any non-alphanumeric characters except ':' and '-'
+    cleaned = ''.join(c for c in cleaned if c.isalnum() or c in ':-')
+    return cleaned
 
 # Get environment variables with defaults
-TELEGRAM_TOKEN = clean_token(os.getenv("TELEGRAM_TOKEN", ""))
+raw_token = os.getenv("TELEGRAM_TOKEN", "")
+logger.info("Raw token length: %d", len(raw_token))
+logger.info("Raw token characters: %s", ' '.join(hex(ord(c)) for c in raw_token[:10]))
+
+TELEGRAM_TOKEN = clean_token(raw_token)
 PORT = int(os.getenv("PORT", 8080))
 
 # Validate token
@@ -34,13 +53,33 @@ if not TELEGRAM_TOKEN:
     logger.error("TELEGRAM_TOKEN environment variable is not set!")
     sys.exit(1)
 
-logger.info("Initializing bot with token length: %d", len(TELEGRAM_TOKEN))
-logger.info("Token starts with: %s...", TELEGRAM_TOKEN[:5] if len(TELEGRAM_TOKEN) > 5 else "")
+logger.info("Cleaned token length: %d", len(TELEGRAM_TOKEN))
+logger.info("Cleaned token format: %s", TELEGRAM_TOKEN[:5] + "..." + TELEGRAM_TOKEN[-5:] if len(TELEGRAM_TOKEN) > 10 else "")
+
+if not validate_token(TELEGRAM_TOKEN):
+    logger.error("Token format is invalid! Should be in format: numbers:letters")
+    logger.error("Current token format: %s", TELEGRAM_TOKEN)
+    sys.exit(1)
 
 try:
     # Initialize bot and dispatcher
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher(bot)
+    
+    # Verify bot token by making a test API call
+    async def verify_token():
+        try:
+            me = await bot.get_me()
+            logger.info(f"Bot initialized successfully. Bot username: @{me.username}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to verify bot token: {e}")
+            return False
+    
+    # Run token verification
+    if not asyncio.run(verify_token()):
+        sys.exit(1)
+        
 except Exception as e:
     logger.error(f"Failed to initialize bot: {e}")
     sys.exit(1)
