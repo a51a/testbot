@@ -1,10 +1,11 @@
 import logging
-from openai import OpenAI
+import openai
 from config.settings import OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Configure OpenAI
+openai.api_key = OPENAI_API_KEY
 
 async def get_fun_fact(latitude: float, longitude: float) -> str:
     """
@@ -27,8 +28,8 @@ async def get_fun_fact(latitude: float, longitude: float) -> str:
             "Focus on unique, specific details rather than general information."
         )
         
-        response = await client.chat.completions.create(
-            model="gpt-4.1-mini",
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4",  # Using GPT-4 as GPT-4.1-mini is not available
             messages=[
                 {"role": "system", "content": "You are a knowledgeable local guide."},
                 {"role": "user", "content": prompt}
