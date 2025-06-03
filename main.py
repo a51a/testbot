@@ -18,23 +18,8 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-def validate_token(token: str) -> bool:
-    """
-    Validate Telegram bot token format.
-    Should be in format: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-    """
-    if not token:
-        return False
-    return True  # Simplified validation as we trust Railway's environment
-
-def clean_token(token: str) -> str:
-    """Clean the token by removing spaces and quotes"""
-    if not token:
-        return ""
-    return token.strip().strip('"\'').strip()
-
 # Get environment variables
-TELEGRAM_TOKEN = clean_token(os.getenv("TELEGRAM_TOKEN", ""))
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
 PORT = int(os.getenv("PORT", 8080))
 
 # Validate token
@@ -42,26 +27,29 @@ if not TELEGRAM_TOKEN:
     logger.error("TELEGRAM_TOKEN environment variable is not set!")
     sys.exit(1)
 
-if not validate_token(TELEGRAM_TOKEN):
-    logger.error("Invalid token format!")
+logger.info("Initializing bot with token length: %d", len(TELEGRAM_TOKEN))
+
+try:
+    # Initialize bot and dispatcher
+    bot = Bot(token=TELEGRAM_TOKEN, parse_mode="HTML")
+    dp = Dispatcher()
+
+    # Register handlers
+    @dp.message(commands=['start', 'help'])
+    async def start_handler(message: types.Message):
+        await cmd_start(message)
+
+    @dp.message(content_types=['location'])
+    async def location_handler(message: types.Message):
+        await handle_location(message)
+
+    @dp.message()
+    async def unknown_handler(message: types.Message):
+        await handle_unknown(message)
+
+except Exception as e:
+    logger.error(f"Failed to initialize bot: {e}")
     sys.exit(1)
-
-# Initialize bot and dispatcher
-bot = Bot(token=TELEGRAM_TOKEN)
-dp = Dispatcher()
-
-# Register handlers
-@dp.message(commands=['start', 'help'])
-async def start_handler(message: types.Message):
-    await cmd_start(message)
-
-@dp.message(content_types=[types.ContentType.LOCATION])
-async def location_handler(message: types.Message):
-    await handle_location(message)
-
-@dp.message()
-async def unknown_handler(message: types.Message):
-    await handle_unknown(message)
 
 # Web app
 app = web.Application()

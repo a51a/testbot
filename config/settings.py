@@ -11,12 +11,12 @@ except:
 IS_TEST = os.getenv('TESTING', 'false').lower() == 'true'
 
 # Bot settings
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
 if not TELEGRAM_TOKEN and not IS_TEST:
     raise ValueError("TELEGRAM_TOKEN environment variable is not set")
 
 # OpenAI settings
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 if not OPENAI_API_KEY and not IS_TEST:
     raise ValueError("OPENAI_API_KEY environment variable is not set")
 
