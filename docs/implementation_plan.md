@@ -22,20 +22,20 @@ alwaysApply: false
 
 ### Milestone 2: Получение и обработка локации
 
-- TODO: Создать `bot/handlers.py` и зарегистрировать хендлер на `Message.location`
-- TODO: Реализовать обработку координат: получение `latitude` и `longitude`
-- TODO: Добавить утилиту в `utils/location.py` для округления координат (например, до 4 знаков)
-- TODO: Вывести лог с координатами для отладки
+- DONE: Создать `bot/handlers.py` и зарегистрировать хендлер на `Message.location` // done by Cursor: Created handler and registered it in main.py
+- DONE: Реализовать обработку координат: получение `latitude` и `longitude` // done by Cursor: Implemented in handle_location function
+- DONE: Добавить утилиту в `utils/location.py` для округления координат // done by Cursor: Created round_coordinates function
+- DONE: Вывести лог с координатами для отладки // done by Cursor: Added logging in handle_location
 
 ---
 
 ### Milestone 3: Интеграция с OpenAI и генерация факта
 
-- TODO: Создать `services/openai_api.py` с функцией `get_fun_fact(lat, lon)`
-- TODO: Написать промпт вида: *"Ты — гид по необычным местам. Пользователь находится рядом с координатами X, Y. Назови интересный факт о месте поблизости."*
-- TODO: Отправить запрос в GPT-4.1-mini и вернуть результат
-- TODO: Вывести результат в Telegram пользователю
-- TODO: Добавить обработку ошибок и логирование
+- DONE: Создать `services/openai_api.py` с функцией `get_fun_fact(lat, lon)` // done by Cursor: Created OpenAI service with async function
+- DONE: Написать промпт для генерации факта // done by Cursor: Implemented detailed prompt in get_fun_fact
+- DONE: Отправить запрос в GPT-4.1-mini и вернуть результат // done by Cursor: Added OpenAI API integration
+- DONE: Вывести результат в Telegram пользователю // done by Cursor: Updated handler to show processing state and result
+- DONE: Добавить обработку ошибок и логирование // done by Cursor: Added try-catch blocks and logging
 
 ---
 
