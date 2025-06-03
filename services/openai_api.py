@@ -1,11 +1,43 @@
 import logging
-import openai
+import os
+from openai import AsyncOpenAI, OpenAIError
 from config.settings import OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
 
-# Configure OpenAI
-openai.api_key = OPENAI_API_KEY
+# Initialize AsyncOpenAI client
+client = None
+
+def init_openai():
+    """Initialize OpenAI with API key and verify access"""
+    global client
+    
+    # Check if running on Railway
+    is_railway = bool(os.getenv('RAILWAY_ENVIRONMENT'))
+    logger.info(f"Running on Railway: {is_railway}")
+    
+    if not OPENAI_API_KEY:
+        logger.error("OpenAI API key is not set in environment!")
+        logger.info("Environment variables available: %s", list(os.environ.keys()))
+        return False
+        
+    try:
+        # Configure OpenAI client
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        
+        # Log partial key for debugging (safely)
+        key_start = OPENAI_API_KEY[:5] if len(OPENAI_API_KEY) > 8 else "****"
+        key_end = OPENAI_API_KEY[-4:] if len(OPENAI_API_KEY) > 8 else "****"
+        logger.info(f"Initialized OpenAI with API key: {key_start}...{key_end}")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing OpenAI client: {str(e)}")
+        return False
+
+# Initialize OpenAI when module is loaded
+if not init_openai():
+    logger.error("Failed to initialize OpenAI API")
 
 async def get_fun_fact(latitude: float, longitude: float) -> str:
     """
@@ -19,6 +51,10 @@ async def get_fun_fact(latitude: float, longitude: float) -> str:
         str: A fun fact about the location
     """
     try:
+        if not client:
+            logger.error("OpenAI client is not initialized!")
+            return "Sorry, the AI service is not properly configured. Please contact the administrator."
+            
         logger.info(f"Generating fun fact for coordinates: {latitude}, {longitude}")
         
         prompt = (
@@ -30,7 +66,7 @@ async def get_fun_fact(latitude: float, longitude: float) -> str:
             "Focus on unique, specific details rather than general information."
         )
         
-        response = await openai.ChatCompletion.acreate(
+        response = await client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a knowledgeable local guide."},
@@ -44,15 +80,14 @@ async def get_fun_fact(latitude: float, longitude: float) -> str:
         logger.info("Successfully generated fun fact")
         return fact
         
-    except openai.error.InvalidRequestError as e:
-        logger.error(f"Invalid request to OpenAI: {e}")
-        return "I couldn't process this location. Please try again with different coordinates."
-    except openai.error.AuthenticationError as e:
-        logger.error(f"Authentication error with OpenAI: {e}")
-        return "There's an issue with the AI service authentication. Please try again later."
-    except openai.error.APIError as e:
-        logger.error(f"OpenAI API error: {e}")
+    except OpenAIError as e:
+        logger.error(f"OpenAI API error: {str(e)}")
+        if "auth" in str(e).lower() or "api key" in str(e).lower():
+            key_start = OPENAI_API_KEY[:5] if len(OPENAI_API_KEY) > 8 else "****"
+            logger.error(f"API key starts with: {key_start}...")
+            return "There's an issue with the AI service authentication. Please check the API key configuration."
         return "The AI service is temporarily unavailable. Please try again later."
+        
     except Exception as e:
-        logger.error(f"Unexpected error generating fun fact: {e}")
+        logger.error(f"Unexpected error generating fun fact: {str(e)}")
         return "I couldn't find an interesting fact about this location at the moment. Please try again later." 
