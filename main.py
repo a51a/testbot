@@ -18,17 +18,32 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
+def clean_token(token: str) -> str:
+    """Clean the token by removing spaces and quotes"""
+    if not token:
+        return ""
+    # Remove spaces, quotes and newlines
+    return token.strip().strip('"\'').strip()
+
 # Get environment variables with defaults
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_TOKEN = clean_token(os.getenv("TELEGRAM_TOKEN", ""))
 PORT = int(os.getenv("PORT", 8080))
 
+# Validate token
 if not TELEGRAM_TOKEN:
     logger.error("TELEGRAM_TOKEN environment variable is not set!")
     sys.exit(1)
 
-# Initialize bot and dispatcher
-bot = Bot(token=TELEGRAM_TOKEN)
-dp = Dispatcher(bot)
+logger.info("Initializing bot with token length: %d", len(TELEGRAM_TOKEN))
+logger.info("Token starts with: %s...", TELEGRAM_TOKEN[:5] if len(TELEGRAM_TOKEN) > 5 else "")
+
+try:
+    # Initialize bot and dispatcher
+    bot = Bot(token=TELEGRAM_TOKEN)
+    dp = Dispatcher(bot)
+except Exception as e:
+    logger.error(f"Failed to initialize bot: {e}")
+    sys.exit(1)
 
 # Register handlers
 @dp.message_handler(content_types=[types.ContentType.LOCATION])
