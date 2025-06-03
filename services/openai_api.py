@@ -19,6 +19,8 @@ async def get_fun_fact(latitude: float, longitude: float) -> str:
         str: A fun fact about the location
     """
     try:
+        logger.info(f"Generating fun fact for coordinates: {latitude}, {longitude}")
+        
         prompt = (
             "You are a knowledgeable local guide. "
             f"A person is at coordinates {latitude}, {longitude}. "
@@ -29,7 +31,7 @@ async def get_fun_fact(latitude: float, longitude: float) -> str:
         )
         
         response = await openai.ChatCompletion.acreate(
-            model="gpt-4",  # Using GPT-4 as GPT-4.1-mini is not available
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a knowledgeable local guide."},
                 {"role": "user", "content": prompt}
@@ -38,7 +40,19 @@ async def get_fun_fact(latitude: float, longitude: float) -> str:
             temperature=0.7
         )
         
-        return response.choices[0].message.content.strip()
+        fact = response.choices[0].message.content.strip()
+        logger.info("Successfully generated fun fact")
+        return fact
+        
+    except openai.error.InvalidRequestError as e:
+        logger.error(f"Invalid request to OpenAI: {e}")
+        return "I couldn't process this location. Please try again with different coordinates."
+    except openai.error.AuthenticationError as e:
+        logger.error(f"Authentication error with OpenAI: {e}")
+        return "There's an issue with the AI service authentication. Please try again later."
+    except openai.error.APIError as e:
+        logger.error(f"OpenAI API error: {e}")
+        return "The AI service is temporarily unavailable. Please try again later."
     except Exception as e:
-        logger.error(f"Error generating fun fact: {e}")
+        logger.error(f"Unexpected error generating fun fact: {e}")
         return "I couldn't find an interesting fact about this location at the moment. Please try again later." 
