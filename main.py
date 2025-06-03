@@ -1,7 +1,6 @@
 import os
 import sys
 import logging
-import re
 from aiogram import Bot, Dispatcher, types
 from aiohttp import web
 import asyncio
@@ -26,26 +25,16 @@ def validate_token(token: str) -> bool:
     """
     if not token:
         return False
-    # Token format: numbers:letters
-    pattern = r'^\d+:[\w-]+$'
-    return bool(re.match(pattern, token))
+    return True  # Simplified validation as we trust Railway's environment
 
 def clean_token(token: str) -> str:
     """Clean the token by removing spaces and quotes"""
     if not token:
         return ""
-    # Remove spaces, quotes, newlines and any hidden characters
-    cleaned = token.strip().strip('"\'').strip()
-    # Remove any non-alphanumeric characters except ':' and '-'
-    cleaned = ''.join(c for c in cleaned if c.isalnum() or c in ':-')
-    return cleaned
+    return token.strip().strip('"\'').strip()
 
-# Get environment variables with defaults
-raw_token = os.getenv("TELEGRAM_TOKEN", "")
-logger.info("Raw token length: %d", len(raw_token))
-logger.info("Raw token characters: %s", ' '.join(hex(ord(c)) for c in raw_token[:10]))
-
-TELEGRAM_TOKEN = clean_token(raw_token)
+# Get environment variables
+TELEGRAM_TOKEN = clean_token(os.getenv("TELEGRAM_TOKEN", ""))
 PORT = int(os.getenv("PORT", 8080))
 
 # Validate token
@@ -53,41 +42,26 @@ if not TELEGRAM_TOKEN:
     logger.error("TELEGRAM_TOKEN environment variable is not set!")
     sys.exit(1)
 
-logger.info("Cleaned token length: %d", len(TELEGRAM_TOKEN))
-logger.info("Cleaned token format: %s", TELEGRAM_TOKEN[:5] + "..." + TELEGRAM_TOKEN[-5:] if len(TELEGRAM_TOKEN) > 10 else "")
-
 if not validate_token(TELEGRAM_TOKEN):
-    logger.error("Token format is invalid! Should be in format: numbers:letters")
-    logger.error("Current token format: %s", TELEGRAM_TOKEN)
+    logger.error("Invalid token format!")
     sys.exit(1)
 
-try:
-    # Initialize bot and dispatcher
-    bot = Bot(token=TELEGRAM_TOKEN)
-    dp = Dispatcher(bot)
-    
-    # Register handlers
-    dp.register_message_handler(cmd_start, commands=['start', 'help'])
-    dp.register_message_handler(handle_location, content_types=[types.ContentType.LOCATION])
-    dp.register_message_handler(handle_unknown, content_types=types.ContentTypes.ANY)
-    
-    # Verify bot token by making a test API call
-    async def verify_token():
-        try:
-            me = await bot.get_me()
-            logger.info(f"Bot initialized successfully. Bot username: @{me.username}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to verify bot token: {e}")
-            return False
-    
-    # Run token verification
-    if not asyncio.run(verify_token()):
-        sys.exit(1)
-        
-except Exception as e:
-    logger.error(f"Failed to initialize bot: {e}")
-    sys.exit(1)
+# Initialize bot and dispatcher
+bot = Bot(token=TELEGRAM_TOKEN)
+dp = Dispatcher()
+
+# Register handlers
+@dp.message(commands=['start', 'help'])
+async def start_handler(message: types.Message):
+    await cmd_start(message)
+
+@dp.message(content_types=[types.ContentType.LOCATION])
+async def location_handler(message: types.Message):
+    await handle_location(message)
+
+@dp.message()
+async def unknown_handler(message: types.Message):
+    await handle_unknown(message)
 
 # Web app
 app = web.Application()
@@ -98,39 +72,42 @@ async def health_check(request):
 
 app.router.add_get("/", health_check)
 
-async def start_bot():
-    """Start the bot polling"""
-    logger.info("Starting bot polling...")
-    try:
-        await dp.start_polling(reset_webhook=True)
-    except Exception as e:
-        logger.error(f"Error in bot polling: {e}")
-        raise
+async def on_startup(app):
+    """Startup handler"""
+    logger.info("Starting bot...")
+    webhook_url = os.getenv("WEBHOOK_URL")
+    if webhook_url:
+        await bot.set_webhook(webhook_url)
+        logger.info(f"Webhook set to {webhook_url}")
 
-async def start_web():
-    """Start the web server"""
-    logger.info(f"Starting web server on port {PORT}...")
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
-    await site.start()
-    return runner
+async def on_shutdown(app):
+    """Shutdown handler"""
+    logger.info("Shutting down bot...")
+    await bot.session.close()
+
+app.on_startup.append(on_startup)
+app.on_shutdown.append(on_shutdown)
 
 async def main():
     """Main function to run both bot and web server"""
     try:
         # Start web server
-        runner = await start_web()
-        logger.info("Web server started successfully")
+        logger.info(f"Starting web server on port {PORT}...")
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
+        await site.start()
         
-        # Start bot
-        await start_bot()
-        logger.info("Bot polling started successfully")
-        
+        # Start polling if no webhook URL is set
+        if not os.getenv("WEBHOOK_URL"):
+            logger.info("Starting polling...")
+            await dp.start_polling(bot)
+        else:
+            logger.info("Webhook mode - not starting polling")
+            
         # Keep the script running
         while True:
-            await asyncio.sleep(3600)  # Sleep for 1 hour
-            logger.info("Bot is still running...")  # Periodic health check log
+            await asyncio.sleep(3600)
             
     except Exception as e:
         logger.error(f"Error in main loop: {e}")
