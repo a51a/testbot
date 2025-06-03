@@ -1,6 +1,6 @@
 import logging
 import os
-from openai import AsyncOpenAI, OpenAIError
+from openai import AsyncOpenAI
 from config.settings import OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ def init_openai():
         return False
         
     try:
-        # Configure OpenAI client
+        # Configure OpenAI client with just the API key
         client = AsyncOpenAI(api_key=OPENAI_API_KEY)
         
         # Log partial key for debugging (safely)
@@ -80,14 +80,8 @@ async def get_fun_fact(latitude: float, longitude: float) -> str:
         logger.info("Successfully generated fun fact")
         return fact
         
-    except OpenAIError as e:
-        logger.error(f"OpenAI API error: {str(e)}")
-        if "auth" in str(e).lower() or "api key" in str(e).lower():
-            key_start = OPENAI_API_KEY[:5] if len(OPENAI_API_KEY) > 8 else "****"
-            logger.error(f"API key starts with: {key_start}...")
-            return "There's an issue with the AI service authentication. Please check the API key configuration."
-        return "The AI service is temporarily unavailable. Please try again later."
-        
     except Exception as e:
-        logger.error(f"Unexpected error generating fun fact: {str(e)}")
+        logger.error(f"Error generating fun fact: {str(e)}")
+        if "auth" in str(e).lower() or "api key" in str(e).lower():
+            return "There's an issue with the AI service authentication. Please check the API key configuration."
         return "I couldn't find an interesting fact about this location at the moment. Please try again later." 
