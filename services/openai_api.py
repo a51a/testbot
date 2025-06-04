@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 # Initialize AsyncOpenAI client
 client = None
 
-def init_openai():
+async def init_openai():
     """Initialize OpenAI with API key and verify access"""
     global client
     
@@ -18,12 +18,13 @@ def init_openai():
     
     if not OPENAI_API_KEY:
         logger.error("OpenAI API key is not set in environment!")
-        logger.info("Environment variables available: %s", list(os.environ.keys()))
         return False
-        
+    
     try:
-        # Configure OpenAI client with just the API key
-        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        # Create a fresh client instance
+        client = AsyncOpenAI(
+            api_key=OPENAI_API_KEY
+        )
         
         # Log partial key for debugging (safely)
         key_start = OPENAI_API_KEY[:5] if len(OPENAI_API_KEY) > 8 else "****"
@@ -34,10 +35,6 @@ def init_openai():
     except Exception as e:
         logger.error(f"Error initializing OpenAI client: {str(e)}")
         return False
-
-# Initialize OpenAI when module is loaded
-if not init_openai():
-    logger.error("Failed to initialize OpenAI API")
 
 async def get_fun_fact(latitude: float, longitude: float) -> str:
     """
@@ -50,10 +47,14 @@ async def get_fun_fact(latitude: float, longitude: float) -> str:
     Returns:
         str: A fun fact about the location
     """
+    global client
+    
     try:
+        # Initialize OpenAI if not already initialized
         if not client:
-            logger.error("OpenAI client is not initialized!")
-            return "Sorry, the AI service is not properly configured. Please contact the administrator."
+            success = await init_openai()
+            if not success:
+                return "Sorry, the AI service is not properly configured. Please contact the administrator."
             
         logger.info(f"Generating fun fact for coordinates: {latitude}, {longitude}")
         

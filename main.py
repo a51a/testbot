@@ -6,6 +6,7 @@ from aiohttp import web
 import asyncio
 from dotenv import load_dotenv
 from bot.handlers import cmd_start, handle_location, handle_unknown
+from services.openai_api import init_openai
 
 # Configure logging first, before any other operations
 logging.basicConfig(
@@ -63,6 +64,13 @@ app.router.add_get("/", health_check)
 async def on_startup(app):
     """Startup handler"""
     logger.info("Starting bot...")
+    
+    # Initialize OpenAI
+    success = await init_openai()
+    if not success:
+        logger.error("Failed to initialize OpenAI")
+    
+    # Set webhook if URL is provided
     webhook_url = os.getenv("WEBHOOK_URL")
     if webhook_url:
         await bot.set_webhook(webhook_url)
